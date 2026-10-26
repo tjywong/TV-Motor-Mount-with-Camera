@@ -4,6 +4,7 @@ import time
 import cv2
 import numpy as np
 import onnxruntime as ort
+from arduino.app_utils import App, Bridge
 
 # Head tracker, Linux side: finds the target head and asks the sketch to turn the
 # camera until that head is in the middle of the frame.
@@ -96,30 +97,27 @@ def open_camera():
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return cap
 
-if __name__ == "__main__":
-    from arduino.app_utils import App, Bridge
+session, input_name = load_model()
+cap = open_camera()
+print(f"[INFO] Head tracker running in {MODE} mode.")
 
-    session, input_name = load_model()
-    cap = open_camera()
-    print(f"[INFO] Head tracker running in {MODE} mode.")
+def loop():
+    # Don't start a new move until the last one is done; frames taken mid-turn are stale
+    if Bridge.call("busy"):
+        time.sleep(0.01)
+        return
 
-    def loop():
-        # Don't start a new move until the last one is done; frames taken mid-turn are stale
-        if Bridge.call("busy"):
-            time.sleep(0.01)
-            return
+    cap.grab()  # drop the frame buffered while the motor was turning
+    ret, frame = cap.read()
+    if not ret:
+        return
 
-        cap.grab()  # drop the frame buffered while the motor was turning
-        ret, frame = cap.read()
-        if not ret:
-            return
+    x = target_x(detect_heads(session, input_name, frame))
+    if x is None:
+        return
 
-        x = target_x(detect_heads(session, input_name, frame))
-        if x is None:
-            return
+    steps = steps_to_center(x, frame.shape[1])
+    if steps != 0:
+        Bridge.call("move", steps)
 
-        steps = steps_to_center(x, frame.shape[1])
-        if steps != 0:
-            Bridge.call("move", steps)
-
-    App.run(user_loop=loop)
+App.run(user_loop=loop)
