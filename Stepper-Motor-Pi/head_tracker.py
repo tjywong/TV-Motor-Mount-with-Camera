@@ -38,7 +38,7 @@ HFOV_DEG = 70        # horizontal field of view of the camera; measure yours
 STEPS_PER_REV = 400  # 200 full steps, half-stepping
 DEADBAND = 0.05      # ignore errors under 5% of the frame width so it doesn't hunt
 GAIN = 0.6           # turn only part of the way each time so detection lag can't overshoot
-DIRECTION = 1        # set to -1 if the camera turns away from the person
+DIRECTION = -1       # flip the sign if the camera turns away from the person
 
 def load_model():
     opts = ort.SessionOptions()
