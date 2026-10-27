@@ -53,16 +53,24 @@ JPEG_QUALITY = 70
 REPORT_EVERY = 30
 
 PINS = [17, 27, 22, 23]  # BCM GPIO for IN1, IN2, IN3, IN4
-MAX_SPEED = 100          # top speed in half steps per second (150 = about 135 degrees/s)
+MAX_SPEED = 100          # top speed in half steps per second (100 = about 90 degrees/s)
 ACCEL = 100              # lower for gentler starts and stops, higher to react faster
+EASE = 4                 # how quickly it glides into place; lower is gentler, higher is snappier
 LIMIT = 100              # half steps either side of the starting position (90 degrees)
+
+# Share of each new detection mixed into the target (0-1). Lower averages over more
+# frames: steadier, but a little slower to follow. 1 turns smoothing off.
+SMOOTHING = 0.5
+# Forget the old target after this many seconds without a head, so a new person is
+# picked up straight away instead of being averaged with the last one
+LOST_AFTER = 1.0
 
 CAMERA_INDEX = 0
 FRAME_WIDTH, FRAME_HEIGHT = 320, 240  # raise to 640x480 if faces far away are missed (slower)
 CAMERA_FPS = 15      # more frames than needed only wastes CPU on decoding
 HFOV_DEG = 70        # horizontal field of view of the camera; measure yours
 STEPS_PER_REV = 400  # 200 full steps, half-stepping
-DEADBAND = 0.05      # ignore errors under 5% of the frame width so it doesn't hunt
+DEADBAND = 0.05      # don't start moving for errors under 5% of the frame width, so it doesn't hunt
 GAIN = 0.9           # a little under 1 in case HFOV_DEG is off
 DIRECTION = -1       # flip the sign if the camera turns away from the person
 
@@ -187,17 +195,40 @@ def find_target(heads, mode):
 
 def steps_to_center(x, width):
     err = x - width / 2
-    if abs(err) < DEADBAND * width:
-        return 0
     focal_px = (width / 2) / math.tan(math.radians(HFOV_DEG / 2))
     angle = math.degrees(math.atan(err / focal_px))
-    return DIRECTION * int(round(GAIN * angle * STEPS_PER_REV / 360))
+    return DIRECTION * GAIN * angle * STEPS_PER_REV / 360
+
+class Follower:
+    # Turns each detection into a smoothed motor target. Averaging over frames stops
+    # detection jitter from twitching the camera, and the deadband only decides when
+    # to start moving: once moving, it keeps following until it's lined up, rather
+    # than stopping short every time the head drifts back inside the deadband.
+    def __init__(self, stepper):
+        self.stepper = stepper
+        self.smoothed = None
+        self.last_seen = 0.0
+
+    def update(self, frame_position, x, width, now):
+        # Where the head was relative to where the motor pointed for this frame
+        goal = frame_position + steps_to_center(x, width)
+        if self.smoothed is None or now - self.last_seen > LOST_AFTER:
+            self.smoothed = goal
+        else:
+            self.smoothed += SMOOTHING * (goal - self.smoothed)
+        self.smoothed = max(-LIMIT, min(LIMIT, self.smoothed))
+        self.last_seen = now
+
+        deadband_steps = abs(steps_to_center(width / 2 + DEADBAND * width, width))
+        if self.stepper.busy() or abs(self.smoothed - self.stepper.position) > deadband_steps:
+            self.stepper.move_to(round(self.smoothed))
 
 def track(camera, stepper, face_detector, pose_session, state):
     # Detection loop: runs in its own thread so the display can update at camera speed
     seq = 0
     frames = 0
     started = time.monotonic()
+    follower = Follower(stepper)
     try:
         while state.running:
             latest = camera.read(seq)
@@ -213,10 +244,7 @@ def track(camera, stepper, face_detector, pose_session, state):
             state.source = source if target is not None else ""
 
             if target is not None:
-                steps = steps_to_center(target[0], frame.shape[1])
-                if steps != 0:
-                    # Where the head was relative to where the motor pointed for this frame
-                    stepper.move_to(frame_position + steps)
+                follower.update(frame_position, target[0], frame.shape[1], time.monotonic())
 
             frames += 1
             if REPORT_EVERY and frames % REPORT_EVERY == 0:
@@ -332,7 +360,7 @@ def main():
     cv2.setNumThreads(THREADS)
     face_detector = load_face_detector()
     pose_session = load_pose_model() if POSE_BACKUP else None
-    stepper = Stepper(PINS, max_speed=MAX_SPEED, accel=ACCEL, limit=LIMIT)
+    stepper = Stepper(PINS, max_speed=MAX_SPEED, accel=ACCEL, ease=EASE, limit=LIMIT)
     camera = Camera(stepper)
     state = State(MODE)
     worker = threading.Thread(target=track, args=(camera, stepper, face_detector, pose_session, state),

@@ -23,15 +23,22 @@ HALF_STEPS = [
 TICK = 0.0005  # seconds between speed updates; caps the top speed near 1 / TICK
 
 class Stepper:
-    def __init__(self, pins, max_speed=150, accel=300, limit=None, release_after=1.0):
+    def __init__(self, pins, max_speed=150, accel=300, ease=None, min_speed=15,
+                 limit=None, release_after=1.0):
         # pins: BCM GPIO numbers for IN1..IN4
         # max_speed: top speed in half steps per second
         # accel: how quickly it speeds up and slows down, in half steps per second per second
+        # ease: if set, glide into the target instead of braking hard at the end. Speed is
+        #   capped at ease * steps still to go, so it slows gradually as it closes in.
+        #   Higher is quicker; 3 means it covers most of the remaining distance in about 1/3 s.
+        # min_speed: slowest it creeps when easing, so the last few steps don't tick slowly
         # limit: furthest the motor may go either side of where it started, in half steps
         # release_after: switch the coils off after this many idle seconds so nothing overheats
         self.coils = [DigitalOutputDevice(p) for p in pins]
         self.max_speed = max_speed
         self.accel = accel
+        self.ease = ease
+        self.min_speed = min_speed
         self.limit = limit
         self.release_after = release_after
         self.position = 0  # half steps from the starting position
@@ -105,7 +112,12 @@ class Stepper:
 
             # Fastest speed from which it can still stop at the target, capped at max_speed
             stop_speed = math.sqrt(2 * self.accel * abs(dist))
-            desired = math.copysign(min(self.max_speed, stop_speed), dist) if dist else 0.0
+            target_speed = min(self.max_speed, stop_speed)
+            if self.ease is not None and dist:
+                # Never below the speed it can stop from in one step, so it can't overshoot
+                floor = min(self.min_speed, math.sqrt(2 * self.accel))
+                target_speed = min(target_speed, max(floor, self.ease * abs(dist)))
+            desired = math.copysign(target_speed, dist) if dist else 0.0
             change = self.accel * dt
             self.speed += max(-change, min(change, desired - self.speed))
 

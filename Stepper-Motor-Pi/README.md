@@ -130,10 +130,13 @@ Settings at the top of `head_tracker.py`:
 | `FRAME_WIDTH`, `FRAME_HEIGHT` | Raise to 640×480 if faces far from the camera are missed (slower) |
 | `MAX_SPEED` | Top turning speed in half steps per second. Lower for a slower, calmer turn |
 | `ACCEL` | How gently it starts and stops. Lower is smoother, higher reacts faster |
+| `EASE` | How quickly it glides into place as it lines up with the head. Lower is gentler, higher is snappier |
+| `SMOOTHING` | Share of each new detection mixed into the target. Lower averages over more frames: steadier but a little slower to follow. `1` turns smoothing off |
+| `LOST_AFTER` | Seconds without a head before the old target is forgotten, so a new person is picked up straight away |
 | `DIRECTION` | Flip between `1` and `-1` if the camera turns away from the person |
 | `HFOV_DEG` | Your camera's horizontal field of view; a wrong value makes moves too short or too long |
 | `LIMIT` | How far the camera may turn either side of where it started, so the cable doesn't wind up. 100 = 90° |
-| `GAIN`, `DEADBAND` | Lower `GAIN` if it overshoots; raise `DEADBAND` if it twitches when the person is near the center |
+| `GAIN`, `DEADBAND` | Lower `GAIN` if it overshoots. `DEADBAND` is how far off center the head must be before the camera starts to turn; raise it if it twitches when the person is near the center |
 | `REPORT_EVERY` | How often to print the detection rate; `0` turns it off |
 
 The camera's starting position is wherever it points when the script starts, so
