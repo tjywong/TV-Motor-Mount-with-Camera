@@ -11,8 +11,9 @@ drives the stepper through the L298N from its own GPIO pins.
 |---|---|
 | `motor_test.py` | Turns the motor through direction and speed tests. Run this first |
 | `head_tracker.py` | The tracker |
-| `stepper.py` | Drives the motor in a background thread (used by both scripts) |
-| `yolov8n-pose.onnx` | The pose model, exported at 320 px |
+| `stepper.py` | Drives the motor in a background thread with smooth speed-up and slow-down (used by both scripts) |
+| `yolov8n-pose.onnx` | The pose model, exported at 256×320 to match the camera's 4:3 frames |
+| `export_model.py` | Remakes the `.onnx` model; run it on your computer, not the Pi |
 
 ## Parts
 
@@ -94,8 +95,8 @@ python3 motor_test.py
 ```
 
 Put a piece of tape on the shaft. Note the fastest speed where the tape still
-comes back to the same spot, and set `STEP_INTERVAL` in `head_tracker.py` to
-that interval. Press Ctrl+C to stop.
+comes back to the same spot; `MAX_SPEED` in `head_tracker.py` must stay below
+it. Press Ctrl+C to stop.
 
 Then start the tracker:
 
@@ -103,16 +104,21 @@ Then start the tracker:
 python3 head_tracker.py
 ```
 
+Every 30 frames it prints how many detections per second it's managing.
+
 Settings at the top of `head_tracker.py`:
 
 | Setting | What it does |
 |---|---|
 | `MODE` | `SINGLE` or `MULTI` |
 | `SHOW_WINDOW` | `True` shows the camera feed (needs the Pi desktop). Then `m` switches mode and `q` quits |
-| `DIRECTION` | Set to `-1` if the camera turns away from the person |
+| `MAX_SPEED` | Top turning speed in half steps per second. Lower for a slower, calmer turn |
+| `ACCEL` | How gently it starts and stops. Lower is smoother, higher reacts faster |
+| `DIRECTION` | Flip between `1` and `-1` if the camera turns away from the person |
 | `HFOV_DEG` | Your camera's horizontal field of view; a wrong value makes moves too short or too long |
 | `LIMIT` | How far the camera may turn either side of where it started, so the cable doesn't wind up. 100 = 90° |
 | `GAIN`, `DEADBAND` | Lower `GAIN` if it overshoots; raise `DEADBAND` if it twitches when the person is near the center |
+| `REPORT_EVERY` | How often to print the detection rate; `0` turns it off |
 
 The camera's starting position is wherever it points when the script starts, so
 point it straight ahead before running.
