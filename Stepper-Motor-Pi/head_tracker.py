@@ -53,8 +53,8 @@ JPEG_QUALITY = 70
 REPORT_EVERY = 30
 
 PINS = [17, 27, 22, 23]  # BCM GPIO for IN1, IN2, IN3, IN4
-MAX_SPEED = 150          # top speed in half steps per second (150 = about 135 degrees/s)
-ACCEL = 300              # lower for gentler starts and stops, higher to react faster
+MAX_SPEED = 100          # top speed in half steps per second (150 = about 135 degrees/s)
+ACCEL = 100              # lower for gentler starts and stops, higher to react faster
 LIMIT = 100              # half steps either side of the starting position (90 degrees)
 
 CAMERA_INDEX = 0
