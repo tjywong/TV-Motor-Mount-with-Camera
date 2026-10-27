@@ -4,15 +4,18 @@ Turns a camera mounted on a stepper so the person's head stays in the center of
 the frame. In single mode it follows the closest person's head; in multi mode it
 follows the average of everyone's heads.
 
-The Pi does everything: it reads the camera, finds heads with YOLOv8n-pose, and
-drives the stepper through the L298N from its own GPIO pins.
+The Pi does everything: it reads the camera, finds heads, and drives the stepper
+through the L298N from its own GPIO pins. Heads are found with the fast YuNet
+face detector. When nobody's face is visible (for example, someone has turned
+away), the slower YOLOv8n-pose model takes over and finds the head from the body.
 
 | File | What it does |
 |---|---|
 | `motor_test.py` | Turns the motor through direction and speed tests. Run this first |
 | `head_tracker.py` | The tracker |
 | `stepper.py` | Drives the motor in a background thread with smooth speed-up and slow-down (used by both scripts) |
-| `yolov8n-pose.onnx` | The pose model, exported at 256×320 to match the camera's 4:3 frames |
+| `face_detection_yunet_2023mar.onnx` | The YuNet face detection model, from [OpenCV Zoo](https://github.com/opencv/opencv_zoo/tree/main/models/face_detection_yunet) (MIT license) |
+| `yolov8n-pose.onnx` | The backup pose model, exported at 256×320 to match the camera's 4:3 frames |
 | `export_model.py` | Remakes the `.onnx` model; run it on your computer, not the Pi |
 
 ## Parts
@@ -106,12 +109,25 @@ python3 head_tracker.py
 
 Every 30 frames it prints how many detections per second it's managing.
 
+To watch the camera, open the browser address it prints (for example
+`http://pi.local:8000`) on any computer on the same network. The window on the
+Pi's own screen only opens when the script is started from the Pi's desktop.
+Started over SSH, it opens there if you add `DISPLAY=:0` in front:
+
+```bash
+DISPLAY=:0 python3 head_tracker.py
+```
+
 Settings at the top of `head_tracker.py`:
 
 | Setting | What it does |
 |---|---|
 | `MODE` | `SINGLE` or `MULTI` |
-| `SHOW_WINDOW` | `True` shows the camera feed (needs the Pi desktop). Then `m` switches mode and `q` quits |
+| `SHOW_WINDOW` | Shows the live camera feed in a window on the Pi's desktop, with every head found (yellow), the target (red), the center line (green), and which model found it. `m` switches mode and `q` quits. Skipped automatically when there's no desktop |
+| `WEB_VIEW` | Serves the same live view to a browser at `http://<pi name>.local:8000` (the address is printed at startup), with a button to switch mode |
+| `WEB_PORT`, `JPEG_QUALITY` | The browser view's port and image quality. Lower quality uses a little less CPU and network |
+| `POSE_BACKUP` | `False` uses faces only: faster when nobody faces the camera, but it won't follow someone turned away |
+| `FRAME_WIDTH`, `FRAME_HEIGHT` | Raise to 640×480 if faces far from the camera are missed (slower) |
 | `MAX_SPEED` | Top turning speed in half steps per second. Lower for a slower, calmer turn |
 | `ACCEL` | How gently it starts and stops. Lower is smoother, higher reacts faster |
 | `DIRECTION` | Flip between `1` and `-1` if the camera turns away from the person |
